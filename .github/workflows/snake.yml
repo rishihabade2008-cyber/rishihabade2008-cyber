@@ -17,6 +17,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
 
       - name: Generate snake SVGs
         uses: Platane/snk/svg-only@v3
@@ -26,11 +29,24 @@ jobs:
             dist/github-snake.svg?palette=githublight&color_snake=0891B2&color_dots=#ebedf0,#c4b5fd,#a78bfa,#7c3aed,#0891B2
             dist/github-snake-dark.svg?palette=githubdark&color_snake=10B981&color_dots=#2d3343,#4b5563,#7C3AED,#A78BFA,#22D3EE
 
-      - name: Push to output branch
-        uses: crazy-max/ghaction-github-pages@v3.1.0
-        with:
-          target_branch: output
-          build_dir: dist
-          commit_message: "Update snake animation [skip ci]"
+      - name: Commit and push dist to output branch
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Ensure origin is available for authenticated push
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/$GITHUB_REPOSITORY" || true
+          git fetch origin || true
+          # Create an orphan branch containing only dist contents
+          git checkout --orphan temp-snake || true
+          git rm -rf . > /dev/null 2>&1 || true
+          # Copy dist files into repo root
+          if [ -d dist ]; then
+            cp -r dist/. . || true
+          fi
+          git add -A
+          git commit -m "Update snake animation [skip ci]" || echo "Nothing to commit"
+          git branch -M output
+          git push -f origin output
